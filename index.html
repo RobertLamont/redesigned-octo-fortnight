@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>ACE-Step 1.5 Song Generator</title>
+  <style>
+    body { font-family: Arial; max-width: 600px; margin: 40px auto; padding: 20px; }
+    input, button { padding: 12px; margin: 10px 0; width: 100%; font-size: 16px; }
+    button { background: #0066ff; color: white; border: none; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <h1>🎵 ACE-Step 1.5 Song Generator</h1>
+  <input type="text" id="prompt" placeholder="Describe your song... (e.g. dreamy lo-fi hip hop about rainy Tokyo nights)" />
+  <button onclick="generateSong()">Generate Song</button>
+
+  <div id="status"></div>
+  <audio id="audioPlayer" controls style="width:100%; margin-top:20px;"></audio>
+
+  <script>
+    const API_URL = "https://YOUR-NGROK-URL.ngrok.io";   // ← Change this
+
+    async function generateSong() {
+      const prompt = document.getElementById('prompt').value;
+      if (!prompt) return alert("Please enter a prompt");
+
+      const status = document.getElementById('status');
+      status.innerHTML = "Generating song... (this can take 10-60 seconds)";
+
+      try {
+        const res = await fetch(`${API_URL}/generate`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prompt: prompt, duration: 90 })
+        });
+
+        const data = await res.json();
+        status.innerHTML = "✅ Done! Playing song...";
+        
+        document.getElementById('audioPlayer').src = `${API_URL}/download/${data.job_id}`;
+      } catch (err) {
+        status.innerHTML = "Error: " + err.message;
+      }
+    }
+  </script>
+</body>
+</html>
