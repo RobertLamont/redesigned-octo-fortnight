@@ -18,35 +18,74 @@
   <audio id="audioPlayer" controls style="width:100%; margin-top:20px;"></audio>
 
   <script>
-    const API_URL = "https://your-ngrok-url.ngrok-free.app";   // ← Make sure it has https://
+    const API_URL = "https://your-ngrok-url.ngrok-free.app";   // ← Change this
 
     async function generateSong() {
-      const prompt = document.getElementById('prompt').value;
+      const prompt = document.getElementById('prompt').value.trim();
+      if (!prompt) return alert("Please enter a prompt");
+
       const status = document.getElementById('status');
-  
-      status.innerHTML = "Generating... (can take 20-90 seconds)";
+      status.innerHTML = "Submitting job...";
 
       try {
-        const res = await fetch(`${API_URL}/generate`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: prompt, duration: 90 })
-      });
+        // Step 1: Release Task
+        const releaseRes = await fetch(`${API_URL}/release_task`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            prompt: prompt,
+            duration: 90,           // in seconds
+            // lyrics: "",          // optional
+            // inference_steps: 8,  // optional
+            })
+        });
 
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const releaseData = await releaseRes.json();
+        if (!releaseData.task_id) throw new Error("No task_id received");
 
-      const data = await res.json();
-    
-      if (data.error) throw new Error(data.error);
+        status.innerHTML = `Job submitted! Task ID: ${releaseData.task_id}<br>Waiting for generation...`;
 
-      status.innerHTML = "✅ Generation complete!";
-      document.getElementById('audioPlayer').src = `${API_URL}/download/${data.job_id}`;
-    
-    } catch (err) {
-      console.error(err);
-      status.innerHTML = `❌ Error: ${err.message}<br>Check console (F12) for details`;
+        // Step 2: Poll for result
+        let attempts = 0;
+        const maxAttempts = 60;   // ~2 minutes timeout
+
+        while (attempts < maxAttempts) {
+          await new Promise(r => setTimeout(r, 3000)); // wait 3 seconds
+
+          const queryRes = await fetch(`${API_URL}/query_result`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              task_ids: [releaseData.task_id]
+            })
+          });
+
+          const result = await queryRes.json();
+
+          if (result[releaseData.task_id]) {
+            const task = result[releaseData.task_id];
+
+            if (task.status === 1) {                    // Success
+              status.innerHTML = "✅ Song ready!";
+              document.getElementById('audioPlayer').src = `${API_URL}/v1/audio?task_id=${releaseData.task_id}`;
+              return;
+            } 
+            else if (task.status === 2) {               // Failed
+              throw new Error(task.error || "Generation failed");
+            }
+          }
+
+          attempts++;
+          status.innerHTML += ".";
+        }
+
+        throw new Error("Timeout: Song took too long");
+
+      } catch (err) {
+        console.error(err);
+        status.innerHTML = `❌ Error: ${err.message}`;
+      }
     }
-  }
   </script>
 </body>
 </html>
