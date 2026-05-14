@@ -18,30 +18,35 @@
   <audio id="audioPlayer" controls style="width:100%; margin-top:20px;"></audio>
 
   <script>
-    const API_URL = "https://recite-dentist-divinely.ngrok-free.dev";   // ← Change this
+    const API_URL = "https://your-ngrok-url.ngrok-free.app";   // ← Make sure it has https://
 
     async function generateSong() {
       const prompt = document.getElementById('prompt').value;
-      if (!prompt) return alert("Please enter a prompt");
-
       const status = document.getElementById('status');
-      status.innerHTML = "Generating song... (this can take 10-60 seconds)";
+  
+      status.innerHTML = "Generating... (can take 20-90 seconds)";
 
       try {
         const res = await fetch(`${API_URL}/generate`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ prompt: prompt, duration: 90 })
-        });
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: prompt, duration: 90 })
+      });
 
-        const data = await res.json();
-        status.innerHTML = "✅ Done! Playing song...";
-        
-        document.getElementById('audioPlayer').src = `${API_URL}/download/${data.job_id}`;
-      } catch (err) {
-        status.innerHTML = "Error: " + err.message;
-      }
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+      const data = await res.json();
+    
+      if (data.error) throw new Error(data.error);
+
+      status.innerHTML = "✅ Generation complete!";
+      document.getElementById('audioPlayer').src = `${API_URL}/download/${data.job_id}`;
+    
+    } catch (err) {
+      console.error(err);
+      status.innerHTML = `❌ Error: ${err.message}<br>Check console (F12) for details`;
     }
+  }
   </script>
 </body>
 </html>
