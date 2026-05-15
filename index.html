@@ -34,12 +34,11 @@
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             prompt: prompt,
-            duration: 90,           // in seconds
-            // lyrics: "",          // optional
-            // inference_steps: 8,  // optional
+            duration: 60,
+            audio_format: "wav",        // ← Add this line
+            // inference_steps: 8,      // optional: lower = faster
             })
         });
-
         const releaseData = await releaseRes.json();
         if (!releaseData.task_id) throw new Error("No task_id received");
 
