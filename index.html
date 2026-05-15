@@ -60,38 +60,51 @@ async function generateSong() {
   }
 }
 
-// === Updated Polling Function ===
 async function pollForResult(task_id) {
   const status = document.getElementById('status');
   let attempts = 0;
-  const maxAttempts = 50;   // ~3.5 minutes
+  const maxAttempts = 60;   // ~3 minutes
 
   while (attempts < maxAttempts) {
-    await new Promise(r => setTimeout(r, 3000)); // Poll every 3 seconds
+    await new Promise(r => setTimeout(r, 3500)); // 3.5 seconds
 
     try {
       const queryRes = await fetch(`${API_URL}/query_result`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
-          task_ids: [task_id] 
+          task_id_list: [task_id]     // ← THIS IS THE CORRECT KEY
         })
       });
 
       const resultData = await queryRes.json();
-      console.log("Poll result:", resultData);   // Helpful for debugging
+      console.log("Poll result:", resultData);   // Keep this for debugging
 
-      // Try multiple possible response structures
-      const tasks = resultData.data || resultData;
-      const task = tasks[task_id];
+      // Handle wrapped response
+      const dataArray = resultData.data || [];
+      const task = dataArray.find(t => t.task_id === task_id);
 
       if (task) {
-        if (task.status === 1 || task.status === "completed") {   // Success
+        console.log("Found task:", task);
+
+        if (task.status === 1) {                    // Success
           status.innerHTML = "✅ Song ready! Playing...";
-          document.getElementById('audioPlayer').src = `${API_URL}/v1/audio?task_id=${task_id}`;
+          
+          // Use the file path from result
+          if (task.result && typeof task.result === "string") {
+            try {
+              const resultObj = JSON.parse(task.result);
+              const filePath = resultObj[0]?.file || `/v1/audio?task_id=${task_id}`;
+              document.getElementById('audioPlayer').src = `${API_URL}${filePath}`;
+            } catch (e) {
+              document.getElementById('audioPlayer').src = `${API_URL}/v1/audio?task_id=${task_id}`;
+            }
+          } else {
+            document.getElementById('audioPlayer').src = `${API_URL}/v1/audio?task_id=${task_id}`;
+          }
           return;
         } 
-        else if (task.status === 2 || task.status === "failed") {
+        else if (task.status === 2) {
           throw new Error(task.error || "Generation failed");
         }
       }
@@ -100,10 +113,10 @@ async function pollForResult(task_id) {
     }
 
     attempts++;
-    status.innerHTML = `Generating... (${attempts * 3}s)`;
+    status.innerHTML = `Generating... (${Math.round(attempts * 3.5)}s)`;
   }
 
-  status.innerHTML = "⏰ Timeout - Song took too long";
+  status.innerHTML = "⏰ Timeout - Try a shorter duration";
 }
 </script>
 </body>
