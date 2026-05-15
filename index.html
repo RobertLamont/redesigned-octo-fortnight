@@ -60,40 +60,50 @@ async function generateSong() {
   }
 }
 
-// Polling function
+// === Updated Polling Function ===
 async function pollForResult(task_id) {
   const status = document.getElementById('status');
   let attempts = 0;
-  const maxAttempts = 40;
+  const maxAttempts = 50;   // ~3.5 minutes
 
   while (attempts < maxAttempts) {
-    await new Promise(r => setTimeout(r, 4000)); // 4 seconds
+    await new Promise(r => setTimeout(r, 3000)); // Poll every 3 seconds
 
     try {
       const queryRes = await fetch(`${API_URL}/query_result`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ task_ids: [task_id] })
+        body: JSON.stringify({ 
+          task_ids: [task_id] 
+        })
       });
 
       const resultData = await queryRes.json();
-      const task = (resultData.data || resultData)[task_id] || resultData[task_id];
+      console.log("Poll result:", resultData);   // Helpful for debugging
 
-      if (task && task.status === 1) {                    // Success
-        status.innerHTML = "✅ Song ready!";
-        document.getElementById('audioPlayer').src = `${API_URL}/v1/audio?task_id=${task_id}`;
-        return;
-      } 
-      else if (task && task.status === 2) {
-        throw new Error(task.error || "Generation failed");
+      // Try multiple possible response structures
+      const tasks = resultData.data || resultData;
+      const task = tasks[task_id];
+
+      if (task) {
+        if (task.status === 1 || task.status === "completed") {   // Success
+          status.innerHTML = "✅ Song ready! Playing...";
+          document.getElementById('audioPlayer').src = `${API_URL}/v1/audio?task_id=${task_id}`;
+          return;
+        } 
+        else if (task.status === 2 || task.status === "failed") {
+          throw new Error(task.error || "Generation failed");
+        }
       }
     } catch (e) {
-      console.error(e);
+      console.error("Polling error:", e);
     }
 
     attempts++;
+    status.innerHTML = `Generating... (${attempts * 3}s)`;
   }
-  status.innerHTML += "<br>⏰ Timeout";
+
+  status.innerHTML = "⏰ Timeout - Song took too long";
 }
 </script>
 </body>
