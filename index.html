@@ -25,9 +25,13 @@ async function generateSong() {
   if (!prompt) return alert("Please enter a prompt");
 
   const status = document.getElementById('status');
-  status.innerHTML = "Submitting job...";
+  const player = document.getElementById('audioPlayer');
+  
+  status.innerHTML = "Submitting job to ACE-Step...";
+  player.src = "";   // Clear previous song
 
   try {
+    // Step 1: Release Task
     const releaseRes = await fetch(`${API_URL}/release_task`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -38,20 +42,17 @@ async function generateSong() {
       })
     });
 
-    const response = await releaseRes.json();
-    
-    // === IMPORTANT: Handle wrapped response ===
-    const taskData = response.data || response;   // Support both formats
+    const releaseData = await releaseRes.json();
+    const taskData = releaseData.data || releaseData;
     const task_id = taskData.task_id || taskData.job_id;
 
     if (!task_id) {
-      console.error("Full response:", response);
-      throw new Error("No task_id in response");
+      throw new Error("Failed to get task_id");
     }
 
-    status.innerHTML = `✅ Job submitted!<br>Task ID: ${task_id}<br>Generating...`;
+    status.innerHTML = `✅ Job submitted!<br>Task ID: ${task_id}<br>Generating song...`;
 
-    // Start polling
+    // Step 2: Start polling
     pollForResult(task_id);
 
   } catch (err) {
@@ -63,61 +64,49 @@ async function generateSong() {
 async function pollForResult(task_id) {
   const status = document.getElementById('status');
   let attempts = 0;
-  const maxAttempts = 60;   // ~3 minutes
+  const maxAttempts = 60;
 
   while (attempts < maxAttempts) {
-    await new Promise(r => setTimeout(r, 3500)); // 3.5 seconds
+    await new Promise(r => setTimeout(r, 4000)); // 4 seconds
 
     try {
       const queryRes = await fetch(`${API_URL}/query_result`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          task_id_list: [task_id]     // ← THIS IS THE CORRECT KEY
-        })
+        body: JSON.stringify({ task_id_list: [task_id] })
       });
 
       const resultData = await queryRes.json();
-      console.log("Poll result:", resultData);   // Keep this for debugging
+      console.log("Poll result:", resultData);   // For debugging
 
-      // Handle wrapped response
       const dataArray = resultData.data || [];
       const task = dataArray.find(t => t.task_id === task_id);
 
-      if (task) {
-        console.log("Found task:", task);
-
-        if (task.status === 1) {                    // Success
-          status.innerHTML = "✅ Song ready! Playing...";
-          
-          // Use the file path from result
-          if (task.result && typeof task.result === "string") {
-            try {
-              const resultObj = JSON.parse(task.result);
-              const filePath = resultObj[0]?.file || `/v1/audio?task_id=${task_id}`;
-              document.getElementById('audioPlayer').src = `${API_URL}${filePath}`;
-            } catch (e) {
-              document.getElementById('audioPlayer').src = `${API_URL}/v1/audio?task_id=${task_id}`;
-            }
-          } else {
-            document.getElementById('audioPlayer').src = `${API_URL}/v1/audio?task_id=${task_id}`;
-          }
-          return;
+      if (task && task.status === 1) {
+        // SUCCESS - Check for S3 public_url first
+        if (task.public_url) {
+          status.innerHTML = "✅ Song ready! (S3)";
+          document.getElementById('audioPlayer').src = task.public_url;
+          console.log("Playing from S3:", task.public_url);
         } 
-        else if (task.status === 2) {
-          throw new Error(task.error || "Generation failed");
+        else {
+          // Fallback
+          status.innerHTML = "✅ Song ready!";
+          document.getElementById('audioPlayer').src = `${API_URL}/v1/audio?task_id=${task_id}`;
         }
+        return;
+      } 
+      else if (task && task.status === 2) {
+        throw new Error(task.error || "Generation failed");
       }
     } catch (e) {
       console.error("Polling error:", e);
     }
 
     attempts++;
-    status.innerHTML = `Generating... (${Math.round(attempts * 3.5)}s)`;
+    status.innerHTML = `Generating... (${Math.round(attempts * 4)} seconds)`;
   }
 
-  status.innerHTML = "⏰ Timeout - Try a shorter duration";
+  status.innerHTML = "⏰ Timeout - Song took too long";
 }
 </script>
-</body>
-</html>
