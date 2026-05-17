@@ -57,58 +57,28 @@ async function generateSong() {
 
 async function pollForResult(task_id) {
   const status = document.getElementById('status');
-  let attempts = 0;
-  const maxAttempts = 60;
 
-  while (attempts < maxAttempts) {
+  while (true) {
     await new Promise(r => setTimeout(r, 4000));
 
-    try {
-      const queryRes = await fetch(`${API_URL}/query_result`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ task_id_list: [task_id] })
-      });
+    const res = await fetch(`${API_URL}/query_result`, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ task_id_list: [task_id] })
+    });
 
-      const resultData = await queryRes.json();
-      const tasks = resultData.data || [];
-      const task = tasks.find(t => t.task_id === task_id);
+    const result = await res.json();
+    const task = (result.data || []).find(t => t.task_id === task_id);
 
-      if (task && task.status === 1) {
-        console.log("Full task:", task);
-
-        // Try to extract public_url (if backend added it)
-        if (task.public_url) {
-          document.getElementById('audioPlayer').src = task.public_url;
-          status.innerHTML = "✅ Song ready from S3!";
-          return;
-        }
-
-        // Fallback: Try to parse the result field and use /v1/audio
-        if (task.result) {
-          try {
-            const files = JSON.parse(task.result);
-            if (files && files.length > 0) {
-              const filePath = files[0].file;
-              const audioUrl = `${API_URL}${filePath}`;
-              document.getElementById('audioPlayer').src = audioUrl;
-              status.innerHTML = "✅ Song ready!";
-              console.log("Playing via proxy:", audioUrl);
-              return;
-            }
-          } catch (e) {
-            console.error("Failed to parse result", e);
-          }
-        }
-
-        status.innerHTML = "✅ Generated but no audio URL found";
+    if (task && task.status === 1) {
+      if (task.public_url) {
+        document.getElementById('audioPlayer').src = task.public_url;
+        status.innerHTML = "✅ Playing from S3";
+      } else {
+        status.innerHTML = "❌ No S3 URL received";
       }
-    } catch (e) {
-      console.error(e);
+      return;
     }
-
-    attempts++;
-    status.innerHTML = `Generating... (${Math.round(attempts * 4)}s)`;
   }
 }
 </script>
