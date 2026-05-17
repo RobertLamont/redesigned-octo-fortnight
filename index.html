@@ -71,29 +71,40 @@ async function pollForResult(task_id) {
       });
 
       const resultData = await queryRes.json();
-      console.log("🔍 Full query_result:", resultData);   // ← Very important
-
       const tasks = resultData.data || [];
       const task = tasks.find(t => t.task_id === task_id);
 
-      if (task) {
-        console.log("Task status:", task.status);
-        console.log("Full task object:", task);
+      if (task && task.status === 1) {
+        console.log("Full task:", task);
 
-        if (task.status === 1) {
-          if (task.public_url) {
-            status.innerHTML = "✅ Song ready from S3!";
-            document.getElementById('audioPlayer').src = task.public_url;
-            console.log("🎵 Playing S3 URL:", task.public_url);
-          } else {
-            status.innerHTML = "✅ Song ready (no public_url found)";
-            console.log("⚠️ No public_url in task");
-          }
+        // Try to extract public_url (if backend added it)
+        if (task.public_url) {
+          document.getElementById('audioPlayer').src = task.public_url;
+          status.innerHTML = "✅ Song ready from S3!";
           return;
         }
+
+        // Fallback: Try to parse the result field and use /v1/audio
+        if (task.result) {
+          try {
+            const files = JSON.parse(task.result);
+            if (files && files.length > 0) {
+              const filePath = files[0].file;
+              const audioUrl = `${API_URL}${filePath}`;
+              document.getElementById('audioPlayer').src = audioUrl;
+              status.innerHTML = "✅ Song ready!";
+              console.log("Playing via proxy:", audioUrl);
+              return;
+            }
+          } catch (e) {
+            console.error("Failed to parse result", e);
+          }
+        }
+
+        status.innerHTML = "✅ Generated but no audio URL found";
       }
     } catch (e) {
-      console.error("Polling error:", e);
+      console.error(e);
     }
 
     attempts++;
