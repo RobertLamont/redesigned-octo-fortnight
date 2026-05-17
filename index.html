@@ -27,11 +27,10 @@ async function generateSong() {
   const status = document.getElementById('status');
   const player = document.getElementById('audioPlayer');
   
-  status.innerHTML = "Submitting job to ACE-Step...";
-  player.src = "";   // Clear previous song
+  status.innerHTML = "Submitting job...";
+  player.src = "";
 
   try {
-    // Step 1: Release Task
     const releaseRes = await fetch(`${API_URL}/release_task`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -46,17 +45,12 @@ async function generateSong() {
     const taskData = releaseData.data || releaseData;
     const task_id = taskData.task_id || taskData.job_id;
 
-    if (!task_id) {
-      throw new Error("Failed to get task_id");
-    }
+    if (!task_id) throw new Error("No task_id received");
 
-    status.innerHTML = `✅ Job submitted!<br>Task ID: ${task_id}<br>Generating song...`;
-
-    // Step 2: Start polling
+    status.innerHTML = `✅ Job submitted!<br>Generating...`;
     pollForResult(task_id);
 
   } catch (err) {
-    console.error(err);
     status.innerHTML = `❌ Error: ${err.message}`;
   }
 }
@@ -67,7 +61,7 @@ async function pollForResult(task_id) {
   const maxAttempts = 60;
 
   while (attempts < maxAttempts) {
-    await new Promise(r => setTimeout(r, 4000)); // 4 seconds
+    await new Promise(r => setTimeout(r, 4000));
 
     try {
       const queryRes = await fetch(`${API_URL}/query_result`, {
@@ -77,36 +71,29 @@ async function pollForResult(task_id) {
       });
 
       const resultData = await queryRes.json();
-      console.log("Poll result:", resultData);   // For debugging
-
-      const dataArray = resultData.data || [];
-      const task = dataArray.find(t => t.task_id === task_id);
+      const tasks = resultData.data || [];
+      const task = tasks.find(t => t.task_id === task_id);
 
       if (task && task.status === 1) {
-        // SUCCESS - Check for S3 public_url first
+        // === MAIN FIX: Use public_url from S3 ===
         if (task.public_url) {
-          status.innerHTML = "✅ Song ready! (S3)";
+          status.innerHTML = "✅ Song ready! (from S3)";
           document.getElementById('audioPlayer').src = task.public_url;
-          console.log("Playing from S3:", task.public_url);
-        } 
-        else {
-          // Fallback
-          status.innerHTML = "✅ Song ready!";
+          console.log("✅ Playing from S3:", task.public_url);
+        } else {
+          status.innerHTML = "✅ Song ready! (fallback)";
           document.getElementById('audioPlayer').src = `${API_URL}/v1/audio?task_id=${task_id}`;
         }
         return;
-      } 
-      else if (task && task.status === 2) {
-        throw new Error(task.error || "Generation failed");
       }
     } catch (e) {
-      console.error("Polling error:", e);
+      console.error(e);
     }
 
     attempts++;
-    status.innerHTML = `Generating... (${Math.round(attempts * 4)} seconds)`;
+    status.innerHTML = `Generating... (${Math.round(attempts * 4)}s)`;
   }
 
-  status.innerHTML = "⏰ Timeout - Song took too long";
+  status.innerHTML = "⏰ Timeout";
 }
 </script>
